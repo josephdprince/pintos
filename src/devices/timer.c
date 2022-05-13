@@ -91,9 +91,37 @@ timer_sleep (int64_t ticks)
 {
   int64_t start = timer_ticks ();
 
-  ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+  // What I think we want to do is put current thread in back of ready queue so that we can
+  // run other threads in the meantime. Once execution comes back to the thread that we are 
+  // trying to sleep we check if enough time has elapsed. If it has, then we continue to run
+  // otherwise we put it in the back of the ready queue and do the same. It appears that the
+  // thread_yield function already does this, but that is how the busy waiting solution was 
+  // implmented. 
+
+  // struct thread* curr = thread_current();
+  // struct list* ready_list = get_list();
+  // curr->status = THREAD_READY;
+  // list_push_back(ready_list, &curr->elem); 
+  // thread stops here
+  // while (timer_elapsed (start) < ticks) {
+  //   list_push_back(ready_list, &curr->elem);
+  // }
+  // curr->status = THREAD_RUNNING;
+  
+  // Disable inturrupts and get current thread/sleeping queue
+  enum intr_level old_level = intr_disable();
+  struct list* sleeping = get_sleeping_q();
+  struct thread* curr = thread_current();
+
+  // Set data in thread so scheduler knows when to wake this thread up
+  curr->start = start;
+  curr->wait_time = ticks;
+
+  list_push_back(sleeping, &thread_current()->elem);
+  thread_block();
+  intr_set_level(old_level);
+
+
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be

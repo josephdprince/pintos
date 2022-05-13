@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "../devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -23,6 +24,8 @@
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
+
+static struct list sleeping_list;
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
@@ -70,6 +73,8 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
+
+struct list* get_sleeping_q(void) {return &sleeping_list;}
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -559,6 +564,19 @@ schedule (void)
   ASSERT (intr_get_level () == INTR_OFF);
   ASSERT (cur->status != THREAD_RUNNING);
   ASSERT (is_thread (next));
+
+  // If sleeping list is not empty then check if we can wake something up
+  if (!list_empty(&sleeping_list)) {
+    struct list_elem* curr = list_head(&sleeping_list); 
+    // Loop through each node so we can check if time has elapsed
+    while (curr != NULL) {
+      struct thread* temp = list_entry(curr, struct thread, elem);
+      if (timer_elapsed (temp->start) >= temp->wait_time) {
+        // Enough time has elapsed
+        thread_unblock(curr);
+      }
+    }
+  }
 
   if (cur != next)
     prev = switch_threads (cur, next);
