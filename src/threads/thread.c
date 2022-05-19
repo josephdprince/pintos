@@ -247,6 +247,10 @@ thread_unblock (struct thread *t)
   list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
+
+  // Preempt running thread. This will then find the thread with
+  // the highest priority to run next when it calls schedule().
+  thread_yield();
 }
 
 /* Returns the name of the running thread. */
@@ -499,8 +503,25 @@ next_thread_to_run (void)
 {
   if (list_empty (&ready_list))
     return idle_thread;
-  else
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);
+  else {
+    // Find thread with highest priority
+    struct list_elem* curr = list_front(&ready_list);
+    struct list_elem* tail = list_tail(&ready_list); 
+    struct thread* next_thread = list_entry (curr, struct thread, elem);
+    struct thread* temp;
+
+    // Loop through ready list and check for a thread with a higher priority
+    curr = curr->next;
+    while (curr != tail) {
+      temp = list_entry(curr, struct thread, elem);
+      if (temp->priority > next_thread->priority) {
+        next_thread = temp;
+      }
+      curr = curr->next;
+    }
+    return next_thread;
+    // return list_entry(list_pop_front(&ready_list), struct thread, elem);
+  }
 }
 
 /* Completes a thread switch by activating the new thread's page
