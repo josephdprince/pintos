@@ -25,6 +25,7 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
+/* List of processes that are in THREAD_BLOCKED state */
 static struct list sleeping_list;
 
 /* List of all processes.  Processes are added to this list
@@ -97,6 +98,7 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+  list_init (&sleeping_list);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -565,22 +567,31 @@ schedule (void)
   ASSERT (cur->status != THREAD_RUNNING);
   ASSERT (is_thread (next));
 
-  // If sleeping list is not empty then check if we can wake something up
-  if (!list_empty(&sleeping_list)) {
-    struct list_elem* curr = list_head(&sleeping_list); 
-    // Loop through each node so we can check if time has elapsed
-    while (curr != NULL) {
-      struct thread* temp = list_entry(curr, struct thread, elem);
-      if (timer_elapsed (temp->start) >= temp->wait_time) {
-        // Enough time has elapsed
-        thread_unblock(curr);
-      }
-    }
-  }
-
   if (cur != next)
     prev = switch_threads (cur, next);
   thread_schedule_tail (prev);
+
+  // If sleeping list is not empty then check if we can wake something up
+  if (!list_empty(&sleeping_list)) {
+    struct list_elem* curr = list_head(&sleeping_list);
+    struct list_elem* tail = list_tail(&sleeping_list); 
+
+    // Loop through each node so we can check if time has elapsed
+    curr = curr->next;
+    while (curr != tail) {
+        struct list_elem* next = curr->next;
+        struct thread* thr = list_entry(curr, struct thread, elem);
+
+        // If enough time has elapsed, remove from sleeping queue and unblock
+        if (timer_elapsed (thr->start) >= thr->wait_time) {
+          list_remove(curr);
+          thread_unblock(thr);
+          thread_yield();
+          break;
+        }
+      curr = next;
+    }
+  }
 }
 
 /* Returns a tid to use for a new thread. */
