@@ -1,6 +1,6 @@
 # -*- makefile -*-
 
-# Test names.
+# Test names. UPDATE AS NEEDED
 tests/threads_TESTS = $(addprefix tests/threads/,alarm-single		\
 alarm-multiple alarm-simultaneous alarm-zero		\
 alarm-negative)                             #    \
