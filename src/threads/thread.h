@@ -141,5 +141,5 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 struct list* get_sleeping_q(void);
-
+bool thread_priority_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 #endif /* threads/thread.h */
