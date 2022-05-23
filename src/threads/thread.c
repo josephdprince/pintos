@@ -78,7 +78,7 @@ static tid_t allocate_tid (void);
 struct list* get_sleeping_q(void) {return &sleeping_list;}
 
 bool thread_priority_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
-  return list_entry(a,struct thread,elem)->priority > list_entry(b,struct thread,elem)->priority;
+  return list_entry(a, struct thread, elem)->priority > list_entry(b, struct thread, elem)->priority;
 }
 
 /* Initializes the threading system by transforming the code
@@ -212,6 +212,12 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
+  // If newly inserted thread is at the front of the ready list, 
+  // then check if it has a higher priority than current thread 
+  if (t->priority > thread_current()->priority) {
+    thread_yield();
+  }
+
   return tid;
 }
 
@@ -248,7 +254,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_insert_ordered(&ready_list, &t->elem, &thread_priority_compare, NULL);
+  list_insert_ordered(&ready_list, &t->elem, &thread_priority_compare, NULL);\
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
