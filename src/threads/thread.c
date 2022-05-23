@@ -353,6 +353,13 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+
+  // Check if preemption should occur
+  if (!list_empty(&ready_list)) {
+    if (list_entry(list_front(&ready_list), struct thread, elem)->priority > thread_current()->priority) {
+      thread_yield();
+    }
+  }
 }
 
 /* Returns the current thread's priority. */

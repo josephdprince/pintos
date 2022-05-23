@@ -4,9 +4,9 @@
 tests/threads_TESTS = $(addprefix tests/threads/, \
 alarm-single alarm-multiple	alarm-simultaneous alarm-zero alarm-negative \
 alarm-priority \
-priority-preempt) 
-# priority-change priority-fifo
-# priority-sema
+priority-preempt \
+priority-change priority-fifo \
+priority-sema)
 # priority-donate-lower
 # priority-donate-one
 # priority-donate-sema
