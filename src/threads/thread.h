@@ -87,14 +87,15 @@ struct thread
     enum thread_status status;          /* Thread state. */
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
+    struct lock *waiting_lock;             /* lock that thread is waiting for */
     int priority;                       /* Priority. */
+    int effectivePriority;              /* Priority after donation*/
     struct list_elem allelem;           /* List element for all threads list. */
     int64_t start;
     int64_t wait_time;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
-
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
