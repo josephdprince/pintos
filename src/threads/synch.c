@@ -175,6 +175,13 @@ static void recursive_donate(struct lock *lock) {
     currPri = thread_current()->effectivePriority;
   }
 
+  if (thread_current()->effectivePriority > currPri) {
+    currPri = thread_current()->effectivePriority;
+  }
+  if (currPri > lock->max_pri) {
+    lock->max_pri = currPri;
+  }
+
   int lockPri;
   if (lock->holder->priority > lock->holder->effectivePriority) {
     lockPri = lock->holder->priority;
@@ -235,22 +242,12 @@ lock_acquire (struct lock *lock)
     thread_current()->waiting_lock = lock;
     recursive_donate(lock);
 
-    // Adjust lock max priority
-    int pri = thread_current()->priority;
-    if (thread_current()->effectivePriority > pri) {
-      pri = thread_current()->effectivePriority;
-    }
-    if (pri > lock->max_pri) {
-      lock->max_pri = pri;
-    }
-
     sema_down (&lock->semaphore);
 
     // We now have the lock
     lock->holder = thread_current ();
     lock->holder->waiting_lock = NULL;
     list_push_front(&lock->holder->held_locks, &lock->elem);
-
   }
 }
 
