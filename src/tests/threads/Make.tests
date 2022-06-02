@@ -11,9 +11,9 @@ priority-donate-lower \
 priority-donate-one \
 priority-donate-sema \
 priority-donate-multiple priority-donate-multiple2 \
-priority-donate-nest priority-donate-chain)
+priority-donate-nest priority-donate-chain \
+mlfqs-load-1)
 # priority-donate-condvar
-# mlfqs-load-1
 # mlfqs-recent-1
 # mlfqs-load-60 mlfqs-load-avg
 # mlfqs-fair-2 mlfqs-fair-20
