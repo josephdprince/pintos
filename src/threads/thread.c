@@ -505,6 +505,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->effectivePriority = PRI_MIN;
   t->waiting_lock = NULL;
   t->magic = THREAD_MAGIC;
+  list_init(&t->held_locks);
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);

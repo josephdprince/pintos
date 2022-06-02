@@ -161,6 +161,7 @@ sema_test_helper (void *sema_)
       sema_up (&sema[1]);
     }
 }
+
 static void recursive_donate(struct lock *lock) {
   if (lock == NULL) {
     return;
@@ -210,6 +211,7 @@ lock_init (struct lock *lock)
   ASSERT (lock != NULL);
 
   lock->holder = NULL;
+  lock->max_pri = PRI_MIN;
   sema_init (&lock->semaphore, 1);
 }
 
@@ -229,16 +231,29 @@ lock_acquire (struct lock *lock)
   ASSERT (!lock_held_by_current_thread (lock));
 
   // If we cannot acquire lock then do a priority donation
-  enum intr_level old_level = intr_disable ();;
+  // enum intr_level old_level = intr_disable ();;
   if (!lock_try_acquire(lock)) {
     thread_current()->waiting_lock = lock;
     recursive_donate(lock);
 
     sema_down (&lock->semaphore);
+
+    // We now have the lock
     lock->holder = thread_current ();
     lock->holder->waiting_lock = NULL;
+    list_push_front(&lock->holder->held_locks, &lock->elem);
+
+    // Adjust lock max priority
+    struct list_elem *e;
+    int max = PRI_MIN;
+    for (e = list_begin (&lock->semaphore.waiters); e != list_end (&lock->semaphore.waiters); e = list_next (e)) {
+      if (list_entry(e, struct thread, elem)->priority > max) {
+        max = list_entry(e, struct thread, elem)->priority;
+      }
+    }
+    lock->max_pri = max;
   }
-  intr_set_level(old_level);
+  // intr_set_level(old_level);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -256,8 +271,19 @@ lock_try_acquire (struct lock *lock)
   ASSERT (!lock_held_by_current_thread (lock));
 
   success = sema_try_down (&lock->semaphore);
-  if (success)
+  if (success) {
     lock->holder = thread_current ();
+    list_push_front(&lock->holder->held_locks, &lock->elem);
+
+    struct list_elem *e;
+    int max = PRI_MIN;
+    for (e = list_begin (&lock->semaphore.waiters); e != list_end (&lock->semaphore.waiters); e = list_next (e)) {
+      if (list_entry(e, struct thread, elem)->priority > max) {
+        max = list_entry(e, struct thread, elem)->priority;
+      }
+    }
+    lock->max_pri = max;
+  }
   return success;
 }
 
@@ -272,7 +298,21 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
-  lock->holder->effectivePriority = PRI_MIN;
+  int max = PRI_MIN;
+  struct list_elem *e;
+  for (e = list_begin (&thread_current()->held_locks); e != list_end (&thread_current()->held_locks); e = list_next (e)) {
+    struct lock *curr = list_entry(e, struct lock, elem);
+    if (curr == lock) {
+      list_remove(e);
+      lock->max_pri = PRI_MIN;
+    }
+    else {
+      if (curr->max_pri > max) {
+        max = curr->max_pri;
+      }
+    }
+  }
+  lock->holder->effectivePriority = max;
   lock->holder = NULL;
   sema_up (&lock->semaphore);
 }
