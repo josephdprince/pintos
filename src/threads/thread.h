@@ -96,6 +96,7 @@ struct thread
     int64_t wait_time;
     int nice;
     int recent_cpu;
+    int tick;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */

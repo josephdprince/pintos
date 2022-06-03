@@ -174,6 +174,7 @@ thread_tick (void)
 
   /* Update load_avg */
   if(thread_mlfqs && timer_ticks() % TIMER_FREQ == 0) {
+    ++t->tick;
     int ready_threads = list_size(&ready_list);
     if(thread_current() != idle_thread) {
       ready_threads++;
@@ -194,6 +195,14 @@ thread_tick (void)
       int curr_cpu = t->recent_cpu;
       int curr_nice = t->nice;
       t->recent_cpu = (((int64_t)(((int64_t)((load_avg) * (2))) * (1 << 14) / (((load_avg) * (2)) + (1) * (1 << 14)))) * (curr_cpu) / (1 << 14)) + (curr_nice) * (1 << 14);
+    }
+
+    if (t->tick == 4) {
+      int curr_cpu = t->recent_cpu;
+      int curr_nice = t->nice;
+
+      t->priority = ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) >= 0 ? ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) + (1 << (14)) / 2) / (1 << (14)) : ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) - (1 << (14)) / 2) / (1 << (14)));
+      t->tick = 0;
     }
   }
 }
@@ -423,7 +432,7 @@ thread_set_nice (int nice)
   int curr_cpu = thread_current()->recent_cpu;
   int curr_nice = thread_current()->nice;
 
-  thread_current()->priority = ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) >= 0 ? ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) + (1 << (14)) / 2) / (1 << (14)) : ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) - (1 << (14)) / 2) / (1 << (14)))
+  thread_current()->priority = ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) >= 0 ? ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) + (1 << (14)) / 2) / (1 << (14)) : ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) - (1 << (14)) / 2) / (1 << (14)));
 
 
 }
@@ -539,6 +548,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->effectivePriority = PRI_MIN;
   t->waiting_lock = NULL;
   t->magic = THREAD_MAGIC;
+  t->tick = 0;
   list_init(&t->held_locks);
 
   if(thread_mlfqs) {
@@ -546,8 +556,8 @@ init_thread (struct thread *t, const char *name, int priority)
       t->nice = 0;
       t->recent_cpu = 0;
     } else {
-      t->nice = thread_get_nice();
-      t->recent_cpu = thread_get_recent_cpu();
+      t->nice = thread_current()->nice;
+      t->recent_cpu = thread_current()->recent_cpu;
     }
   }
 
