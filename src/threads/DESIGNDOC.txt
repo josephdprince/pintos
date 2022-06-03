@@ -8,9 +8,9 @@
 
 >> Fill in the names and email addresses of your group members.
 
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
+Puloma Katiyar        <pkatiyar@uci.edu>
+Joseph Prince         <jdprince@uci.edu>
+Alexandra Zhang Jiang <azhangji@uci.edu>
 
 ---- PRELIMINARIES ----
 
@@ -30,26 +30,91 @@ FirstName LastName <email@domain.example>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+// sleeping_list keeps track of all the threads that are waiting
+// until x ticks has passed to be awaken and put into the ready queue	
+static struct list sleeping_list
+
+// added two member variables to keep track of when to wake up a thread: 
+// int64_t start is the current cpu time when the thread is put to sleep
+// int64_t wait_time is the amount of ticks that the thread sleeps
+struct thread
+    {
+    /* Owned by thread.c. */
+    tid_t tid;                          /* Thread identifier. */
+    enum thread_status status;          /* Thread state. */
+    char name[16];                      /* Name (for debugging purposes). */
+    uint8_t *stack;                     /* Saved stack pointer. */
+    int priority;                       /* Priority. */
+    struct list_elem allelem;           /* List element for all threads list. */
+    
+    int64_t start;			/* NEW */
+    int64_t wait_time;			/* NEW */
+
+    /* Shared between thread.c and synch.c. */
+    struct list_elem elem;              /* List element. */
+
+#ifdef USERPROG
+    /* Owned by userprog/process.c. */
+    uint32_t *pagedir;                  /* Page directory. */
+#endif
+    /* Owned by thread.c. */
+    unsigned magic;                     /* Detects stack overflow. */
+  };
+
+
+
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe what happens in a call to timer_sleep(),
 >> including the effects of the timer interrupt handler.
 
+timer_sleep():
+Interrupts are disabled, the current thread running
+is pushed back to the end of the sleeping list, data needed to keep 
+track of time is initialized and the thread is blocked.
+
+schedule():
+Everytime the schedule function is called in threads.c, the program
+checks if there are sleeping threads. When the enough ticks has 
+passed for a thread, the program removes the thread from sleeping 
+queue and unblocks it.
+
+
 >> A3: What steps are taken to minimize the amount of time spent in
 >> the timer interrupt handler?
+
+All the checks are done in the schedule function in threads.c.
+
+
+
 
 ---- SYNCHRONIZATION ----
 
 >> A4: How are race conditions avoided when multiple threads call
 >> timer_sleep() simultaneously?
 
+We disabled the interrupts in timer_sleep()
+
+
 >> A5: How are race conditions avoided when a timer interrupt occurs
 >> during a call to timer_sleep()?
+
+We did not use a timer interrupt. We traverse through a queue of
+sleeping threads and check if enough ticks has passed. 
+// not sure about this one // 
+
+
 
 ---- RATIONALE ----
 
 >> A6: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
+
+// not sure how to answer //
+
+
+
+
 
 			 PRIORITY SCHEDULING
 			 ===================
