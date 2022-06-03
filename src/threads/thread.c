@@ -173,36 +173,35 @@ thread_tick (void)
     intr_yield_on_return ();
 
   /* Update load_avg */
-  if(thread_mlfqs && timer_ticks() % TIMER_FREQ == 0) {
-    ++t->tick;
-    int ready_threads = list_size(&ready_list);
+  if(thread_mlfqs) {
     if(thread_current() != idle_thread) {
-      ready_threads++;
+        thread_current()->recent_cpu = thread_current()->recent_cpu + (1 * 1 << 14);
+    }
+    if (timer_ticks() % TIMER_FREQ == 0) {
+      int ready_threads = list_size(&ready_list);
+      if(thread_current() != idle_thread) {
+        ready_threads++;
+      }
+
+      load_avg = (((int64_t)(((59) * (1 << (14))) / (60))) * (load_avg) / (1 << (14))) + ((((1) * (1 << (14))) / (60)) * (ready_threads));
+      
+      struct list_elem *e;
+      for (e = list_begin (&all_list); e != list_end (&all_list);
+        e = list_next (e))
+      {
+        struct thread *t = list_entry (e, struct thread, allelem);
+        int curr_cpu = t->recent_cpu;
+        int curr_nice = t->nice;
+        t->recent_cpu = ((int64_t)(((int64_t)(2 * load_avg * 1 << 14)) / (2 * load_avg + (1 * 1 << 14))) * curr_cpu / (1 << 14)) + (curr_nice * 1 << 14);
+      
+      }
     }
 
-    load_avg = (((int64_t)(((59) * (1 << (14))) / (60))) * (load_avg) / (1 << (14))) + ((((1) * (1 << (14))) / (60)) * (ready_threads));
-
-    // recent cpu
-    if(thread_current() != idle_thread) {
-      thread_current()->recent_cpu++;
-    }
-    
-    struct list_elem *e;
-    for (e = list_begin (&all_list); e != list_end (&all_list);
-       e = list_next (e))
-    {
-      struct thread *t = list_entry (e, struct thread, allelem);
-      int curr_cpu = t->recent_cpu;
-      int curr_nice = t->nice;
-      t->recent_cpu = (((int64_t)(((int64_t)((load_avg) * (2))) * (1 << 14) / (((load_avg) * (2)) + (1) * (1 << 14)))) * (curr_cpu) / (1 << 14)) + (curr_nice) * (1 << 14);
-    }
-
-    if (t->tick == 4) {
+    if (timer_ticks() % 4 == 0) {
       int curr_cpu = t->recent_cpu;
       int curr_nice = t->nice;
 
       t->priority = ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) >= 0 ? ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) + (1 << (14)) / 2) / (1 << (14)) : ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) - (1 << (14)) / 2) / (1 << (14)));
-      t->tick = 0;
     }
   }
 }
@@ -406,10 +405,12 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  if (!thread_mlfqs) {
+    thread_current ()->priority = new_priority;
 
-  // Yield for preemption
-  thread_yield();
+    // Yield for preemption
+    thread_yield();
+  }
 }
 
 /* Returns the current thread's priority. */
@@ -417,8 +418,10 @@ int
 thread_get_priority (void) 
 {
   struct thread* curr = thread_current();
-  if (curr->effectivePriority > curr->priority) {
-    return curr->effectivePriority;
+  if (!thread_mlfqs) {
+    if (curr->effectivePriority > curr->priority) {
+      return curr->effectivePriority;
+    }
   }
   return curr->priority;
 }
@@ -456,7 +459,7 @@ int
 thread_get_recent_cpu (void) 
 {
   int curr_cpu = thread_current()->recent_cpu;
-  return (((100) * (curr_cpu)) >= 0 ? (((100) * (curr_cpu)) + (1 << (14)) / 2) / (1 << (14)) : (((100) * (curr_cpu)) - (1 << (14)) / 2) / (1 << (14)));;
+  return (((100) * (curr_cpu)) >= 0 ? (((100) * (curr_cpu)) + (1 << (14)) / 2) / (1 << (14)) : (((100) * (curr_cpu)) - (1 << (14)) / 2) / (1 << (14)));
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -548,7 +551,6 @@ init_thread (struct thread *t, const char *name, int priority)
   t->effectivePriority = PRI_MIN;
   t->waiting_lock = NULL;
   t->magic = THREAD_MAGIC;
-  t->tick = 0;
   list_init(&t->held_locks);
 
   if(thread_mlfqs) {
@@ -559,6 +561,9 @@ init_thread (struct thread *t, const char *name, int priority)
       t->nice = thread_current()->nice;
       t->recent_cpu = thread_current()->recent_cpu;
     }
+    int curr_cpu = t->recent_cpu;
+    int curr_nice = t->nice;
+    t->priority = ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) >= 0 ? ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) + (1 << (14)) / 2) / (1 << (14)) : ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) - (1 << (14)) / 2) / (1 << (14)));
   }
 
   old_level = intr_disable ();

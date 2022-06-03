@@ -13,12 +13,12 @@ priority-donate-sema \
 priority-donate-multiple priority-donate-multiple2 \
 priority-donate-nest priority-donate-chain \
 mlfqs-load-1 \
-mlfqs-recent-1)
-# priority-donate-condvar
-# mlfqs-load-60 mlfqs-load-avg
+mlfqs-recent-1 \
+mlfqs-load-60 mlfqs-load-avg)
 # mlfqs-fair-2 mlfqs-fair-20
 # mlfqs-nice-2 mlfqs-nice-10
 # mlfqs-block
+# priority-donate-condvar
 
 # Sources for tests.
 tests/threads_SRC  = tests/threads/tests.c
