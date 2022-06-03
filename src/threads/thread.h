@@ -94,6 +94,8 @@ struct thread
     struct list_elem allelem;           /* List element for all threads list. */
     int64_t start;
     int64_t wait_time;
+    int nice;
+    int recent_cpu;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */

@@ -175,10 +175,26 @@ thread_tick (void)
   /* Update load_avg */
   if(thread_mlfqs && timer_ticks() % TIMER_FREQ == 0) {
     int ready_threads = list_size(&ready_list);
-    if(thread_current() != idle_thread)
+    if(thread_current() != idle_thread) {
       ready_threads++;
+    }
 
     load_avg = (((int64_t)(((59) * (1 << (14))) / (60))) * (load_avg) / (1 << (14))) + ((((1) * (1 << (14))) / (60)) * (ready_threads));
+
+    // recent cpu
+    if(thread_current() != idle_thread) {
+      thread_current()->recent_cpu++;
+    }
+    
+    struct list_elem *e;
+    for (e = list_begin (&all_list); e != list_end (&all_list);
+       e = list_next (e))
+    {
+      struct thread *t = list_entry (e, struct thread, allelem);
+      int curr_cpu = t->recent_cpu;
+      int curr_nice = t->nice;
+      t->recent_cpu = (((int64_t)(((int64_t)((load_avg) * (2))) * (1 << 14) / (((load_avg) * (2)) + (1) * (1 << 14)))) * (curr_cpu) / (1 << 14)) + (curr_nice) * (1 << 14);
+    }
   }
 }
 
@@ -400,17 +416,23 @@ thread_get_priority (void)
 
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int nice UNUSED) 
+thread_set_nice (int nice) 
 {
-  /* Not yet implemented. */
+  thread_current()->nice = nice;
+  
+  int curr_cpu = thread_current()->recent_cpu;
+  int curr_nice = thread_current()->nice;
+
+  thread_current()->priority = ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) >= 0 ? ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) + (1 << (14)) / 2) / (1 << (14)) : ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) - (1 << (14)) / 2) / (1 << (14)))
+
+
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return thread_current()->nice;
 }
 
 /* Returns 100 times the system load average. */
@@ -424,8 +446,8 @@ thread_get_load_avg (void)
 int
 thread_get_recent_cpu (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  int curr_cpu = thread_current()->recent_cpu;
+  return (((100) * (curr_cpu)) >= 0 ? (((100) * (curr_cpu)) + (1 << (14)) / 2) / (1 << (14)) : (((100) * (curr_cpu)) - (1 << (14)) / 2) / (1 << (14)));;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -518,6 +540,16 @@ init_thread (struct thread *t, const char *name, int priority)
   t->waiting_lock = NULL;
   t->magic = THREAD_MAGIC;
   list_init(&t->held_locks);
+
+  if(thread_mlfqs) {
+    if(t == initial_thread) {
+      t->nice = 0;
+      t->recent_cpu = 0;
+    } else {
+      t->nice = thread_get_nice();
+      t->recent_cpu = thread_get_recent_cpu();
+    }
+  }
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
