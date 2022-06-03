@@ -108,6 +108,11 @@ struct thread
     unsigned magic;                     /* Detects stack overflow. */
   };
 
+  struct milf_thread {
+     struct list* l;                     /* List of threads that are ready to run and have same priority. */
+     struct list_elem* prev;             /* Previous ran thread. Used to facilitate round robin. */
+  };
+
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */

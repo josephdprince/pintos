@@ -32,6 +32,9 @@ static struct list sleeping_list;
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
 
+/* List of 64 lists that the mlfqs (milf - MultI Level Feedback) uses. */
+static struct milf_thread* milf_lists[64];
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -124,8 +127,19 @@ thread_init (void)
   list_init (&all_list);
   list_init (&sleeping_list);
 
-  if(thread_mlfqs)
+  if(thread_mlfqs) {
     load_avg = 0;
+    
+    int i;
+    for (i = 0; i < 64; ++i) {
+      struct milf_thread milf;
+      struct list l;
+      list_init(&l);
+      milf.l = &l;
+      milf.prev = NULL;
+      milf_lists[i] = &milf;
+    }
+  }
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -303,7 +317,12 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back(&ready_list, &t->elem);
+  if (thread_mlfqs) {
+    list_push_back(milf_lists[t->priority]->l, &t->elem);
+  }
+  else {
+    list_push_back(&ready_list, &t->elem);
+  }
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -373,8 +392,14 @@ thread_yield (void)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
-  if (cur != idle_thread) 
-    list_push_back(&ready_list, &cur->elem);
+  if (cur != idle_thread) {
+    if (thread_mlfqs) {
+      list_push_back(milf_lists[cur->priority]->l, &cur->elem);
+    }
+    else {
+      list_push_back(&ready_list, &cur->elem);
+    }
+  }
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -588,6 +613,37 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
+  if (thread_mlfqs) {
+    int i;
+    for (i = 63; i >= 0; --i) {
+      struct milf_thread *curr_milf = milf_lists[i];
+      struct list *curr_list = curr_milf->l;
+      struct list_elem* ret;
+
+      // If list is not empty then we want to run a thread in here
+      if (!list_empty(curr_list)) {
+        // First time iterating through the list, start at head
+        if (curr_milf->prev == NULL) {
+          ret = list_head(curr_list);
+          curr_milf->prev = list_head(curr_list);
+        }
+        else {
+          // If prev is at the end of the list we circle back to the front
+          if (curr_milf->prev == list_back(curr_list)) {
+            ret = list_head(curr_list);
+            curr_milf->prev = list_head(curr_list);
+          }
+          // Else, we move to next thread
+          else {
+            ret = curr_milf->prev->next;
+            curr_milf->prev = ret;
+          }
+        }
+
+        return list_entry(ret, struct thread, elem);
+      }
+    }
+  }
   if (list_empty (&ready_list))
     return idle_thread;
   else {
