@@ -62,7 +62,7 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 bool thread_mlfqs;
-static int load_avg;
+static int load_avg=0;
 
 static void kernel_thread (thread_func *, void *aux);
 
@@ -173,8 +173,13 @@ thread_tick (void)
     intr_yield_on_return ();
 
   /* Update load_avg */
-  if(thread_mlfqs && timer_ticks() % TIMER_FREQ == 0)
-    load_avg = thread_get_load_avg();
+  if(thread_mlfqs && timer_ticks() % TIMER_FREQ == 0) {
+    int ready_threads = list_size(&ready_list);
+    if(thread_current() != idle_thread)
+      ready_threads++;
+
+    load_avg = (((int64_t)(((59) * (1 << (14))) / (60))) * (load_avg) / (1 << (14))) + ((((1) * (1 << (14))) / (60)) * (ready_threads));
+  }
 }
 
 /* Prints thread statistics. */
@@ -412,11 +417,7 @@ thread_get_nice (void)
 int
 thread_get_load_avg (void) 
 {
-  int ready_threads = list_size(&ready_list);
-  if(thread_current() != idle_thread)
-    ready_threads++;
-
-  return (int)((59.0/60.0)*load_avg + (1.0/60.0)*ready_threads);
+  return (((100) * (load_avg)) >= 0 ? (((100) * (load_avg)) + (1 << (14)) / 2) / (1 << (14)) : (((100) * (load_avg)) - (1 << (14)) / 2) / (1 << (14)));
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
