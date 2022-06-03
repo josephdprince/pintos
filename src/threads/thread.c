@@ -189,19 +189,15 @@ thread_tick (void)
       for (e = list_begin (&all_list); e != list_end (&all_list);
         e = list_next (e))
       {
-        struct thread *t = list_entry (e, struct thread, allelem);
-        int curr_cpu = t->recent_cpu;
-        int curr_nice = t->nice;
-        t->recent_cpu = ((int64_t)(((int64_t)(2 * load_avg * 1 << 14)) / (2 * load_avg + (1 * 1 << 14))) * curr_cpu / (1 << 14)) + (curr_nice * 1 << 14);
-      
+        struct thread *curr = list_entry (e, struct thread, allelem);
+        int curr_cpu = curr->recent_cpu;
+        int curr_nice = curr->nice;
+        curr->recent_cpu = ((int64_t)(((int64_t)(2 * load_avg * 1 << 14)) / (2 * load_avg + (1 * 1 << 14))) * curr_cpu / (1 << 14)) + (curr_nice * 1 << 14);
+        
+        if(timer_ticks() % 4 == 0) {
+          curr->priority = ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) >= 0 ? ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) + (1 << (14)) / 2) / (1 << (14)) : ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) - (1 << (14)) / 2) / (1 << (14)));
+        }
       }
-    }
-
-    if (timer_ticks() % 4 == 0) {
-      int curr_cpu = t->recent_cpu;
-      int curr_nice = t->nice;
-
-      t->priority = ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) >= 0 ? ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) + (1 << (14)) / 2) / (1 << (14)) : ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) - (1 << (14)) / 2) / (1 << (14)));
     }
   }
 }
