@@ -199,12 +199,8 @@ thread_tick (void)
         int curr_nice = curr->nice;
 
         curr->priority = ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) >= 0 ? ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) + (1 << (14)) / 2) / (1 << (14)) : ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) - (1 << (14)) / 2) / (1 << (14)));
-        if (curr->priority > PRI_MAX) {
-          curr->priority = PRI_MAX;
-        }
-        else if (curr->priority < PRI_MIN) {
-          curr->priority = PRI_MIN;
-        }
+        curr->priority = curr->priority > PRI_MAX ? PRI_MAX : curr->priority;
+        curr->priority = curr->priority < PRI_MIN ? PRI_MIN : curr->priority;
       }
     }
     
@@ -471,12 +467,8 @@ thread_set_nice (int nice)
   int curr_nice = thread_current()->nice;
 
   thread_current()->priority = ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) >= 0 ? ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) + (1 << (14)) / 2) / (1 << (14)) : ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) - (1 << (14)) / 2) / (1 << (14)));
-  if (thread_current()->priority > PRI_MAX) {
-    thread_current()->priority = PRI_MAX;
-  }
-  else if (thread_current()->priority < PRI_MIN) {
-    thread_current()->priority = PRI_MIN;
-  }
+  thread_current()->priority = thread_current()->priority > PRI_MAX ? PRI_MAX : thread_current()->priority;
+  thread_current()->priority = thread_current()->priority < PRI_MIN ? PRI_MIN : thread_current()->priority;
 }
 
 /* Returns the current thread's nice value. */
@@ -603,12 +595,8 @@ init_thread (struct thread *t, const char *name, int priority)
     int curr_cpu = t->recent_cpu;
     int curr_nice = t->nice;
     t->priority = ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) >= 0 ? ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) + (1 << (14)) / 2) / (1 << (14)) : ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) - (1 << (14)) / 2) / (1 << (14)));
-    if (t->priority > PRI_MAX) {
-      t->priority = PRI_MAX;
-    }
-    else if (t->priority < PRI_MIN) {
-      t->priority = PRI_MIN;
-    }
+    t->priority = t->priority > PRI_MAX ? PRI_MAX : t->priority;
+    t->priority = t->priority < PRI_MIN ? PRI_MIN : t->priority;
   }
 
   old_level = intr_disable ();
