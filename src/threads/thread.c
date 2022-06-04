@@ -32,8 +32,8 @@ static struct list sleeping_list;
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
 
-/* List of 64 lists that the mlfqs (milf - MultI Level Feedback) uses. */
-static struct milf_thread* milf_lists[64];
+/* List of 64 lists that the MultI Level Feedback (milf) system uses. */
+static struct list milf_lists[PRI_MAX + 1];
 
 /* Idle thread. */
 static struct thread *idle_thread;
@@ -65,7 +65,8 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 bool thread_mlfqs;
-static int load_avg=0;
+static int load_avg;
+int ready_threads;
 
 static void kernel_thread (thread_func *, void *aux);
 
@@ -129,15 +130,11 @@ thread_init (void)
 
   if(thread_mlfqs) {
     load_avg = 0;
+    ready_threads = 0;
     
     int i;
-    for (i = 0; i < 64; ++i) {
-      struct milf_thread milf;
-      struct list l;
-      list_init(&l);
-      milf.l = &l;
-      milf.prev = NULL;
-      milf_lists[i] = &milf;
+    for (i = 0; i < PRI_MAX + 1; ++i) {
+      list_init(&milf_lists[i]);
     }
   }
 
@@ -188,29 +185,39 @@ thread_tick (void)
 
   /* Update load_avg */
   if(thread_mlfqs) {
-    if(thread_current() != idle_thread) {
-        thread_current()->recent_cpu = thread_current()->recent_cpu + (1 * 1 << 14);
+    if(t != idle_thread) {
+        t->recent_cpu = t->recent_cpu + (1 * 1 << 14);
     }
-    if (timer_ticks() % TIMER_FREQ == 0) {
-      int ready_threads = list_size(&ready_list);
-      if(thread_current() != idle_thread) {
-        ready_threads++;
-      }
+    
+    struct list_elem *e;
 
-      load_avg = (((int64_t)(((59) * (1 << (14))) / (60))) * (load_avg) / (1 << (14))) + ((((1) * (1 << (14))) / (60)) * (ready_threads));
-      
-      struct list_elem *e;
-      for (e = list_begin (&all_list); e != list_end (&all_list);
-        e = list_next (e))
-      {
+    // Update priority
+    if(timer_ticks() % 4 == 0) {
+      for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next (e)) {
         struct thread *curr = list_entry (e, struct thread, allelem);
         int curr_cpu = curr->recent_cpu;
         int curr_nice = curr->nice;
-        curr->recent_cpu = ((int64_t)(((int64_t)(2 * load_avg * 1 << 14)) / (2 * load_avg + (1 * 1 << 14))) * curr_cpu / (1 << 14)) + (curr_nice * 1 << 14);
-        
-        if(timer_ticks() % 4 == 0) {
-          curr->priority = ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) >= 0 ? ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) + (1 << (14)) / 2) / (1 << (14)) : ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) - (1 << (14)) / 2) / (1 << (14)));
+
+        curr->priority = ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) >= 0 ? ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) + (1 << (14)) / 2) / (1 << (14)) : ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) - (1 << (14)) / 2) / (1 << (14)));
+        if (curr->priority > PRI_MAX) {
+          curr->priority = PRI_MAX;
         }
+        else if (curr->priority < PRI_MIN) {
+          curr->priority = PRI_MIN;
+        }
+      }
+    }
+    
+    
+    if (timer_ticks() % TIMER_FREQ == 0) {
+      load_avg = (((int64_t)(((59) * (1 << (14))) / (60))) * (load_avg) / (1 << (14))) + ((((1) * (1 << (14))) / (60)) * (ready_threads));
+      
+      for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next (e)) {
+        struct thread *curr = list_entry (e, struct thread, allelem);
+        int curr_cpu = curr->recent_cpu;
+        int curr_nice = curr->nice;
+
+        curr->recent_cpu = ((int64_t)(((int64_t)(2 * load_avg * 1 << 14)) / (2 * load_avg + (1 * 1 << 14))) * curr_cpu / (1 << 14)) + (curr_nice * 1 << 14);
       }
     }
   }
@@ -297,6 +304,9 @@ thread_block (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   thread_current ()->status = THREAD_BLOCKED;
+  if (thread_mlfqs && running_thread() != idle_thread) {
+    --ready_threads;
+  }
   schedule ();
 }
 
@@ -318,7 +328,8 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   if (thread_mlfqs) {
-    list_push_back(milf_lists[t->priority]->l, &t->elem);
+    list_push_back(&milf_lists[t->priority], &t->elem);
+    ++ready_threads;
   }
   else {
     list_push_back(&ready_list, &t->elem);
@@ -376,6 +387,9 @@ thread_exit (void)
      when it calls thread_schedule_tail(). */
   intr_disable ();
   list_remove (&thread_current()->allelem);
+  if (thread_mlfqs && running_thread() != idle_thread) {
+    --ready_threads;
+  }
   thread_current ()->status = THREAD_DYING;
   schedule ();
   NOT_REACHED ();
@@ -394,7 +408,7 @@ thread_yield (void)
   old_level = intr_disable ();
   if (cur != idle_thread) {
     if (thread_mlfqs) {
-      list_push_back(milf_lists[cur->priority]->l, &cur->elem);
+      list_push_back(&milf_lists[cur->priority], &cur->elem);
     }
     else {
       list_push_back(&ready_list, &cur->elem);
@@ -457,8 +471,12 @@ thread_set_nice (int nice)
   int curr_nice = thread_current()->nice;
 
   thread_current()->priority = ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) >= 0 ? ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) + (1 << (14)) / 2) / (1 << (14)) : ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) - (1 << (14)) / 2) / (1 << (14)));
-
-
+  if (thread_current()->priority > PRI_MAX) {
+    thread_current()->priority = PRI_MAX;
+  }
+  else if (thread_current()->priority < PRI_MIN) {
+    thread_current()->priority = PRI_MIN;
+  }
 }
 
 /* Returns the current thread's nice value. */
@@ -585,6 +603,12 @@ init_thread (struct thread *t, const char *name, int priority)
     int curr_cpu = t->recent_cpu;
     int curr_nice = t->nice;
     t->priority = ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) >= 0 ? ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) + (1 << (14)) / 2) / (1 << (14)) : ((PRI_MAX - ((curr_cpu) / (4)) - (curr_nice * 2)) - (1 << (14)) / 2) / (1 << (14)));
+    if (t->priority > PRI_MAX) {
+      t->priority = PRI_MAX;
+    }
+    else if (t->priority < PRI_MIN) {
+      t->priority = PRI_MIN;
+    }
   }
 
   old_level = intr_disable ();
@@ -615,34 +639,12 @@ next_thread_to_run (void)
 {
   if (thread_mlfqs) {
     int i;
-    for (i = 63; i >= 0; --i) {
-      struct milf_thread *curr_milf = milf_lists[i];
-      struct list *curr_list = curr_milf->l;
-      struct list_elem* ret;
-
-      // If list is not empty then we want to run a thread in here
-      if (!list_empty(curr_list)) {
-        // First time iterating through the list, start at head
-        if (curr_milf->prev == NULL) {
-          ret = list_head(curr_list);
-          curr_milf->prev = list_head(curr_list);
-        }
-        else {
-          // If prev is at the end of the list we circle back to the front
-          if (curr_milf->prev == list_back(curr_list)) {
-            ret = list_head(curr_list);
-            curr_milf->prev = list_head(curr_list);
-          }
-          // Else, we move to next thread
-          else {
-            ret = curr_milf->prev->next;
-            curr_milf->prev = ret;
-          }
-        }
-
-        return list_entry(ret, struct thread, elem);
+    for (i = PRI_MAX; i >= PRI_MIN; --i) {
+      if (!list_empty(&milf_lists[i])) {
+        return list_entry(list_pop_front(&milf_lists[i]), struct thread, elem);
       }
     }
+    return idle_thread;
   }
   if (list_empty (&ready_list))
     return idle_thread;
